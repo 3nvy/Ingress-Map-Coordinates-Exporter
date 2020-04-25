@@ -21,7 +21,7 @@ Then either use a direct link for the plugin, or download the file and upload it
 
 ## Ingress Map
 
-Go to [Ingress Map](https://intel.ingress.com/intel) and login with your Ingress account (required, or you wont me able to see the map), then load to an area you wich and wait for all portals to load. 
+Go to [Ingress Map](https://intel.ingress.com/intel) and login with your Ingress account (required, or you wont me able to see the map), then load to an area you want and wait for all portals to load. 
 * Depending of your area and zoom level, you may have different results and it may take longer to load, so be patient
 
 Once the portals are loaded, draw a polygon (with the draw tools at the top left cornor) over the are you want to export(in this example, I've drawn a polygon over Central Park)
