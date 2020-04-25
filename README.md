@@ -11,7 +11,7 @@ Go to [ITTC Buttton Extention](https://iitc.app/download_desktop.html) website a
 
 ## Install This Plugin
 
-Once the IITC Extesion is instaled, you need to install this plugin by adding it as an extran plugin to the extension
+Once the IITC Extesion is instaled, you need to install this plugin by adding it as an external plugin to the extension
 
 ![](images/1.png)
 
