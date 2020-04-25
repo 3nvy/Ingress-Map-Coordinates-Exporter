@@ -42,8 +42,8 @@ An then select the desired export option:
 
 * **Polygon**: exports every portal inside the first drawn polygon
 
-![](images/5.png)
+![](images/5.PNG)
 
 Now you have a set of coordinates that you can use to create your gpx route
 
-![](images/6.png)
+![](images/6.PNG)
