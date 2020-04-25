@@ -1,0 +1,19 @@
+{
+  "name": "ingress-coords-exporter",
+  "version": "1.0.0",
+  "description": "Ingress Map Coordinates Exporter",
+  "main": "iitc-plugin-portal-coords-export.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@gitlab.com/3nvy/ingress-coords-exporter.git"
+  },
+  "author": "3nvy",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://gitlab.com/3nvy/ingress-coords-exporter/issues"
+  },
+  "homepage": "https://gitlab.com/3nvy/ingress-coords-exporter#readme"
+}
