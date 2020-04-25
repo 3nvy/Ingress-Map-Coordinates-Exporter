@@ -32,7 +32,7 @@ Once the portals are loaded, draw a polygon (with the draw tools at the top left
 
 ## Exporting
 
-Once you have the selected area marked, press the **Exoort Coords** button
+Once you have the selected area marked, press the **Export Coords** button
 
 ![](images/4.png)
 
