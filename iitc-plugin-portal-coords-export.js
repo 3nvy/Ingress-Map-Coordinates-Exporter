@@ -14,51 +14,48 @@ function wrapper(plugin_info) {
   // ensure plugin framework is there, even if iitc is not yet loaded
   if (typeof window.plugin !== "function") window.plugin = function () {};
 
-  window.plugin.multiexport = function () {};
+  window.plugin.exportcoords = function () {};
 
-  /*********** MENUE ************************************************************/
-  window.plugin.multiexport.createmenu = function () {
-    var htmldata =
-      "<p> Export from <b> Current View </b> or <b> inside Polygon to CSV Format </p>" +
-      "<p> Please note that the first drawn polygon will be choosen to export from. </p>" +
-      "<table class='multiexporttabel'> <tr> <th> </th> <th> CSV </th> </tr>" +
-      "<tr> <th> Current View </th>" +
-      "<td> <a onclick=\"window.plugin.multiexport.export('CSV','VIEW');\" title='Export Current View to CSV'>XXX</a> </td>";
-    htmldata += "</tr>";
-    if (plugin.drawTools) {
-      htmldata +=
-        "<tr> <th> Polygon </th>" +
-        "<td> <a onclick=\"window.plugin.multiexport.export('CSV','VIEWFIL');\" title='Export Polygon to CSV'>XXX</a> </td>";
-      htmldata += "</tr>";
+  /*********** Menu ************************************************************/
+  window.plugin.exportcoords.createmenu = function () {
+    var html = `
+    <p> Export from <b> Current View </b> or <b> inside Polygon </b> to CSV Format </p>
+    <p> Please note that the first drawn polygon will be choosen to export from. </p>
+
+    <div class="flexed-box">
+    <a onclick=\"window.plugin.exportcoords.export('CSV','VIEW');\" title='Export Portal Coordinates From ViewPort'>Export Current View</a>
+    ${
+      plugin.drawTools && window.plugin.exportcoords.getFirstPolygon()
+        ? `<a onclick=\"window.plugin.exportcoords.export('CSV','VIEWFIL');\" title='Export Portal Coordinates From Polygon'>Export Polygon</a>`
+        : "<span>No polygon available for extraction</span>"
     }
+    </div>
+    `;
 
     window.dialog({
       title: "Export Options",
-      html: htmldata,
-      dialogClass: "ui-dialog-multiExport",
+      html,
+      dialogClass: "ui-dialog-exportcoords",
     });
   };
 
   /*********** HELPER FUNCTION ****************************************************/
-  window.plugin.multiexport.portalinpolygon = function (
+  window.plugin.exportcoords.portalinpolygon = function (
     portal,
-    LatLngsObjectsArray
+    PolygonCoordinates
   ) {
-    var portalCoords = portal.split(",");
-
-    var x = portalCoords[0],
-      y = portalCoords[1];
+    var [x, y] = portal.split(",");
 
     var inside = false;
     for (
-      var i = 0, j = LatLngsObjectsArray.length - 1;
-      i < LatLngsObjectsArray.length;
+      var i = 0, j = PolygonCoordinates.length - 1;
+      i < PolygonCoordinates.length;
       j = i++
     ) {
-      var xi = LatLngsObjectsArray[i]["lat"],
-        yi = LatLngsObjectsArray[i]["lng"];
-      var xj = LatLngsObjectsArray[j]["lat"],
-        yj = LatLngsObjectsArray[j]["lng"];
+      var xi = PolygonCoordinates[i]["lat"],
+        yi = PolygonCoordinates[i]["lng"];
+      var xj = PolygonCoordinates[j]["lat"],
+        yj = PolygonCoordinates[j]["lng"];
 
       var intersect =
         yi > y != yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
@@ -68,85 +65,57 @@ function wrapper(plugin_info) {
     return inside;
   };
 
+  window.plugin.exportcoords.portalinviewport = function (
+    pLat,
+    pLng,
+    viewport
+  ) {
+    return (
+      pLat < viewport._southWest.lat ||
+      pLng < viewport._southWest.lng ||
+      pLat > viewport._northEast.lat ||
+      pLng > viewport._northEast.lng
+    );
+  };
+
+  window.plugin.exportcoords.getFirstPolygon = function () {
+    try {
+      return JSON.parse(localStorage["plugin-draw-tools-layer"])[0];
+    } catch (err) {
+      return;
+    }
+  };
+
   /*********** ABSTRACT EXPORT FUNCTION ******************************************/
-  window.plugin.multiexport.export = function (type, source, bkmrkFolder) {
-    console.log(type);
-    var o = [];
-    var portals;
-    var sourceTitle;
-    var windowTitle;
-    if (type === "MF") {
-      windowTitle = "Maxfield Export";
-    } else {
-      windowTitle = type + " Export";
-    }
-    if (localStorage["plugin-draw-tools-layer"]) {
-      var drawLayer = JSON.parse(localStorage["plugin-draw-tools-layer"]);
-    }
-    if (source == "BKMRK") {
-      var bookmarks = JSON.parse(localStorage[plugin.bookmarks.KEY_STORAGE]);
-      portals = bookmarks.portals[bkmrkFolder].bkmrk;
-    } else {
-      portals = window.portals;
-    }
+  window.plugin.exportcoords.export = function (type, source) {
+    var { portalinpolygon, portalinviewport } = window.plugin.exportcoords;
+    var polygon = window.plugin.exportcoords.getFirstPolygon();
+    var checkOnPolygon = source === "VIEWFIL" && polygon;
+    var portals = Object.values(window.portals);
+    var bounds = window.map.getBounds();
 
-    for (var i in portals) {
-      var keys = 0;
-      var p = window.portals[i];
-      var latlng = p._latlng.lat + "," + p._latlng.lng;
-      if (source === "VIEWFIL") {
-        var portalInPolygon = false;
-        for (var dl in drawLayer) {
-          if (drawLayer[dl].type === "polygon") {
-            if (
-              window.plugin.multiexport.portalinpolygon(
-                latlng,
-                drawLayer[dl].latLngs
-              )
-            ) {
-              portalInPolygon = true;
-              break;
-            }
-          }
-        }
-        if (!portalInPolygon) {
-          continue;
-        }
-      }
+    var allowedPortals = portals
+      .filter((p) => {
+        var latlng = `${p._latlng.lat},${p._latlng.lng}`;
 
-      if (plugin.keys) {
-        keys = plugin.keys.keys[i];
-      }
-      var b = window.map.getBounds();
-      // skip if not currently visible
-      if (
-        p._latlng.lat < b._southWest.lat ||
-        p._latlng.lng < b._southWest.lng ||
-        p._latlng.lat > b._northEast.lat ||
-        p._latlng.lng > b._northEast.lng
-      )
-        continue;
+        return checkOnPolygon
+          ? portalinpolygon(latlng, polygon.latLngs)
+          : portalinviewport(p._latlng.lat, p._latlng.lng, bounds);
+      })
+      .map((p) => `${p._latlng.lat},${p._latlng.lng}`);
 
-      var lat = latlng.split(",")[0];
-      var lng = latlng.split(",")[1];
-
-      switch (type) {
-        case "CSV":
-          o.push(lat + "," + lng);
-          break;
-      }
-    }
-    var ostr = o.join("\n");
+    var ostr = allowedPortals.join("\n");
 
     var dialog = window
       .dialog({
-        title: windowTitle,
+        title: "Exported Coordinates",
         dialogClass: "ui-dialog-maxfieldexport",
-        html:
-          '<textarea readonly id="idmExport" style="width: 600px; height: ' +
-          $(window).height() / 3 +
-          'px; margin-top: 5px;"></textarea>' +
-          "<p><a onclick=\"$('.ui-dialog-maxfieldexport textarea').select();\">Select all</a></p>",
+        html: `
+         <textarea readonly id="idmExport" style="resize: none; width: 600px; height:${
+           $(window).height() / 3
+         }px; margin-top: 5px;"></textarea>
+         <p><a onclick=\"$('.ui-dialog-maxfieldexport textarea').select();\">Select all</a></p>
+        `,
       })
       .parent();
 
@@ -162,16 +131,28 @@ function wrapper(plugin_info) {
   // setup function called by IITC
   var setup = function () {
     $("#toolbox").append(
-      '<a onclick="window.plugin.multiexport.createmenu();" title="Export the currently visible portals">Export Coords</a>'
+      '<a onclick="window.plugin.exportcoords.createmenu();" title="Export the currently visible portals">Export Coords</a>'
     );
-    $("head").append(
-      "<style>" +
-        ".multiExportSetbox > a { display:block; color:#ffce00; border:1px solid #ffce00; padding:3px 0; margin:10px auto; width:100%; text-align:center; background:rgba(8,48,78,.9); }" +
-        "table.multiexporttabel { border: 1px solid #ffce00; text-align:center; width: 100%} " +
-        "table.multiexporttabel td { border: 1px solid; text-align:center; width: 15%; table-layout: fixed;} " +
-        ".ui-dialog-multiExport {width: 400px !important}" +
-        "</style>"
-    );
+
+    $("head").append(`
+      <style>
+          .exportcoordsSetbox > a { display:block; color:#ffce00; border:1px solid #ffce00; padding:3px 0; margin:10px auto; width:100%; text-align:center; background:rgba(8,48,78,.9); }
+          .ui-dialog-exportcoords { width: 400px !important }
+          .flexed-box {
+            display: -webkit-box;
+            display: -ms-flexbox;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
+            align-items: center;
+          }
+          .flexed-box > a:first-child { margin-bottom: 10px }
+      </style>
+    `);
   };
 
   setup.info = plugin_info; //add the script info data to the function as a property
