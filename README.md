@@ -8,6 +8,10 @@ This plugin allows you to download ingress map portal coordinates in [Lat,Lon] f
 ## IITC Button Extension
 Go to [ITTC Buttton Extention](https://iitc.app/download_desktop.html) website and install the right extension for your browser
 
+Once installed, enable the Draw Tools
+
+![](images/7.png)
+![](images/8.png)
 
 ## Install This Plugin
 
