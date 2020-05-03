@@ -380,7 +380,7 @@ function wrapper(plugin_info) {
             align-items: center;
             -webkit-box-ordinal-group: 2;-ms-flex-order: 1;order: 1
            }
-          .selected-coords-content img { width: 35px; height: 35px; margin-right: 10px }
+          .selected-coords-content img { width: 35px; min-width: 35px; height: 35px; margin-right: 10px }
 
           .selected-coords-content-controls {
             -webkit-box-ordinal-group: 1;-ms-flex-order: 0;order: 0
