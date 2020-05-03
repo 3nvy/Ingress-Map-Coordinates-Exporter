@@ -17,13 +17,110 @@ function wrapper(plugin_info) {
   window.plugin.exportcoords = function () {};
 
   window.plugin.exportcoords.setupCallback = function () {
-    if (!localStorage["selectiveCoordsList"])
-      localStorage["selectiveCoordsList"] = "[]";
+    if (!localStorage["selectiveCoordsList"]) localStorage["selectiveCoordsList"] = "[]";
 
     addHook("portalDetailsUpdated", window.plugin.exportcoords.addLink);
     window.plugin.exportcoords.refreshSelectedCoordinatesList();
 
     window.plugin.exportcoords.drawSelectedCoordsPolyline();
+  };
+
+  /*********** Core Behavior Overide ************************************************************/
+  window.Render.prototype.createPortalEntity = function (ent) {
+    this.seenPortalsGuid[ent[0]] = true; // flag we've seen it
+
+    var previousData = undefined;
+
+    // check if entity already exists
+    if (ent[0] in window.portals) {
+      // yes. now check to see if the entity data we have is newer than that in place
+      var p = window.portals[ent[0]];
+
+      if (p.options.timestamp >= ent[1]) return; // this data is identical or older - abort processing
+
+      // the data we have is newer. many data changes require re-rendering of the portal
+      // (e.g. level changed, so size is different, or stats changed so highlighter is different)
+      // so to keep things simple we'll always re-create the entity in this case
+
+      // remember the old details, for the callback
+
+      previousData = p.options.data;
+
+      this.deletePortalEntity(ent[0]);
+    }
+
+    var portalLevel = parseInt(ent[2][4]) || 0;
+    var team = teamStringToId(ent[2][1]);
+    // the data returns unclaimed portals as level 1 - but IITC wants them treated as level 0
+    if (team == TEAM_NONE) portalLevel = 0;
+
+    var latlng = L.latLng(ent[2][2] / 1e6, ent[2][3] / 1e6);
+
+    var data = decodeArray.portalSummary(ent[2]);
+
+    var dataOptions = {
+      level: portalLevel,
+      team: team,
+      ent: ent, // LEGACY - TO BE REMOVED AT SOME POINT! use .guid, .timestamp and .data instead
+      guid: ent[0],
+      timestamp: ent[1],
+      data: data,
+    };
+
+    window.pushPortalGuidPositionCache(ent[0], data.latE6, data.lngE6);
+
+    var marker = createMarker(latlng, dataOptions);
+
+    function handler_portal_click(e) {
+      if (event.shiftKey) window.plugin.exportcoords.addToList(e.target.options.guid);
+      window.renderPortalDetails(e.target.options.guid);
+    }
+    function handler_portal_dblclick(e) {
+      window.renderPortalDetails(e.target.options.guid);
+      window.map.setView(e.target.getLatLng(), DEFAULT_ZOOM);
+    }
+    function handler_portal_contextmenu(e) {
+      window.renderPortalDetails(e.target.options.guid);
+      if (window.isSmartphone()) {
+        window.show("info");
+      } else if (!$("#scrollwrapper").is(":visible")) {
+        $("#sidebartoggle").click();
+      }
+    }
+
+    marker.on("click", handler_portal_click);
+    marker.on("dblclick", handler_portal_dblclick);
+    marker.on("contextmenu", handler_portal_contextmenu);
+
+    window.runHooks("portalAdded", { portal: marker, previousData: previousData });
+
+    window.portals[ent[0]] = marker;
+
+    // check for URL links to portal, and select it if this is the one
+    if (urlPortalLL && urlPortalLL[0] == marker.getLatLng().lat && urlPortalLL[1] == marker.getLatLng().lng) {
+      // URL-passed portal found via pll parameter - set the guid-based parameter
+      log.log("urlPortalLL " + urlPortalLL[0] + "," + urlPortalLL[1] + " matches portal GUID " + ent[0]);
+
+      urlPortal = ent[0];
+      urlPortalLL = undefined; // clear the URL parameter so it's not matched again
+    }
+    if (urlPortal == ent[0]) {
+      // URL-passed portal found via guid parameter - set it as the selected portal
+      log.log("urlPortal GUID " + urlPortal + " found - selecting...");
+      selectedPortal = ent[0];
+      urlPortal = undefined; // clear the URL parameter so it's not matched again
+    }
+
+    // (re-)select the portal, to refresh the sidebar on any changes
+    if (ent[0] == selectedPortal) {
+      log.log("portal guid " + ent[0] + " is the selected portal - re-rendering portal details");
+      renderPortalDetails(selectedPortal);
+    }
+
+    window.ornaments.addPortal(marker);
+
+    //TODO? postpone adding to the map layer
+    window.Render.prototype.addPortalToMapLayer(marker);
   };
 
   /*********** Selected Coordinates ************************************************************/
@@ -72,23 +169,17 @@ function wrapper(plugin_info) {
   };
 
   window.plugin.exportcoords.drawSelectedCoordsPolyline = function () {
-    if (window.plugin.exportcoords.selectedCoordsPolyline)
-      window.plugin.exportcoords.selectedCoordsPolyline.remove();
+    if (window.plugin.exportcoords.selectedCoordsPolyline) window.plugin.exportcoords.selectedCoordsPolyline.remove();
 
     var selectiveCoordsList = JSON.parse(localStorage["selectiveCoordsList"]);
-    var pointList = selectiveCoordsList.map(
-      ({ lat, lng }) => new L.LatLng(lat, lng)
-    );
+    var pointList = selectiveCoordsList.map(({ lat, lng }) => new L.LatLng(lat, lng));
 
-    window.plugin.exportcoords.selectedCoordsPolyline = new L.Polyline(
-      pointList,
-      {
-        color: "red",
-        weight: 3,
-        opacity: 0.5,
-        smoothFactor: 1,
-      }
-    );
+    window.plugin.exportcoords.selectedCoordsPolyline = new L.Polyline(pointList, {
+      color: "red",
+      weight: 3,
+      opacity: 0.5,
+      smoothFactor: 1,
+    });
     window.plugin.exportcoords.selectedCoordsPolyline.addTo(map);
   };
 
@@ -151,35 +242,24 @@ function wrapper(plugin_info) {
   };
 
   /*********** HELPER FUNCTION ****************************************************/
-  window.plugin.exportcoords.portalinpolygon = function (
-    portal,
-    PolygonCoordinates
-  ) {
+  window.plugin.exportcoords.portalinpolygon = function (portal, PolygonCoordinates) {
     var [x, y] = portal.split(",");
 
     var inside = false;
-    for (
-      var i = 0, j = PolygonCoordinates.length - 1;
-      i < PolygonCoordinates.length;
-      j = i++
-    ) {
+    for (var i = 0, j = PolygonCoordinates.length - 1; i < PolygonCoordinates.length; j = i++) {
       var xi = PolygonCoordinates[i]["lat"],
         yi = PolygonCoordinates[i]["lng"];
       var xj = PolygonCoordinates[j]["lat"],
         yj = PolygonCoordinates[j]["lng"];
 
-      var intersect =
-        yi > y != yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+      var intersect = yi > y != yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
       if (intersect) inside = !inside;
     }
 
     return inside;
   };
 
-  window.plugin.exportcoords.portalincircle = function (
-    portal,
-    { latLng: { lat: cx, lng: cy }, radius }
-  ) {
+  window.plugin.exportcoords.portalincircle = function (portal, { latLng: { lat: cx, lng: cy }, radius }) {
     var [x, y] = portal.split(",");
 
     var ky = 40000 / 360;
@@ -189,17 +269,8 @@ function wrapper(plugin_info) {
     return Math.sqrt(dx * dx + dy * dy) <= radius / 1000;
   };
 
-  window.plugin.exportcoords.portalinviewport = function (
-    pLat,
-    pLng,
-    viewport
-  ) {
-    return (
-      pLat < viewport._southWest.lat ||
-      pLng < viewport._southWest.lng ||
-      pLat > viewport._northEast.lat ||
-      pLng > viewport._northEast.lng
-    );
+  window.plugin.exportcoords.portalinviewport = function (pLat, pLng, viewport) {
+    return pLat < viewport._southWest.lat || pLng < viewport._southWest.lng || pLat > viewport._northEast.lat || pLng > viewport._northEast.lng;
   };
 
   window.plugin.exportcoords.getFirstShape = function () {
@@ -212,11 +283,7 @@ function wrapper(plugin_info) {
 
   /*********** ABSTRACT EXPORT FUNCTION ******************************************/
   window.plugin.exportcoords.export = function (type, source) {
-    var {
-      portalinpolygon,
-      portalinviewport,
-      portalincircle,
-    } = window.plugin.exportcoords;
+    var { portalinpolygon, portalinviewport, portalincircle } = window.plugin.exportcoords;
     var shape = window.plugin.exportcoords.getFirstShape();
 
     var checkOnSelected = source === "SELECTED";
@@ -226,16 +293,12 @@ function wrapper(plugin_info) {
     var portals = Object.values(window.portals);
     var bounds = window.map.getBounds();
 
-    console.log(
-      checkOnPolygon ? "POLYGON" : checkOnCircle ? "CIRCLE" : "VIEWPORT"
-    );
+    console.log(checkOnPolygon ? "POLYGON" : checkOnCircle ? "CIRCLE" : "VIEWPORT");
 
     var allowedPortals;
 
     if (checkOnSelected) {
-      allowedPortals = JSON.parse(localStorage["selectiveCoordsList"]).map(
-        ({ lat, lng }) => `${lat},${lng}`
-      );
+      allowedPortals = JSON.parse(localStorage["selectiveCoordsList"]).map(({ lat, lng }) => `${lat},${lng}`);
     } else
       allowedPortals = portals
         .filter((p) => {
@@ -254,9 +317,7 @@ function wrapper(plugin_info) {
         title: "Exported Coordinates",
         dialogClass: "ui-dialog-export",
         html: `
-         <textarea readonly id="idmExport" style="resize: none; width: 600px; height:${
-           $(window).height() / 3
-         }px; margin-top: 5px;"></textarea>
+         <textarea readonly id="idmExport" style="resize: none; width: 600px; height:${$(window).height() / 3}px; margin-top: 5px;"></textarea>
          <p><a onclick=\"$('.ui-dialog-export textarea').select();\">Select all</a></p>
         `,
       })
@@ -273,9 +334,7 @@ function wrapper(plugin_info) {
   /*********** PLUGIN SETUP *****************************************************/
   // setup function called by IITC
   var setup = function () {
-    $("#toolbox").append(
-      '<a onclick="window.plugin.exportcoords.createmenu();" title="Export the currently visible portals">Export Coords</a>'
-    );
+    $("#toolbox").append('<a onclick="window.plugin.exportcoords.createmenu();" title="Export the currently visible portals">Export Coords</a>');
 
     $("head").append(`
       <style>
@@ -392,9 +451,5 @@ if (typeof GM_info !== "undefined" && GM_info && GM_info.script)
     name: GM_info.script.name,
     description: GM_info.script.description,
   };
-script.appendChild(
-  document.createTextNode("(" + wrapper + ")(" + JSON.stringify(info) + ");")
-);
-(document.body || document.head || document.documentElement).appendChild(
-  script
-);
+script.appendChild(document.createTextNode("(" + wrapper + ")(" + JSON.stringify(info) + ");"));
+(document.body || document.head || document.documentElement).appendChild(script);
