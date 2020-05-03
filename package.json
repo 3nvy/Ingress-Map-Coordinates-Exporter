@@ -1,6 +1,6 @@
 {
   "name": "ingress-coords-exporter",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Ingress Map Coordinates Exporter",
   "main": "iitc-plugin-portal-coords-export.js",
   "scripts": {
