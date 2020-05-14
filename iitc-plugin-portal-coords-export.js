@@ -26,102 +26,103 @@ function wrapper(plugin_info) {
   };
 
   /*********** Core Behavior Overide ************************************************************/
-  window.Render.prototype.createPortalEntity = function (ent) {
-    this.seenPortalsGuid[ent[0]] = true; // flag we've seen it
+  window.Render &&
+    (window.Render.prototype.createPortalEntity = function (ent) {
+      this.seenPortalsGuid[ent[0]] = true; // flag we've seen it
 
-    var previousData = undefined;
+      var previousData = undefined;
 
-    // check if entity already exists
-    if (ent[0] in window.portals) {
-      // yes. now check to see if the entity data we have is newer than that in place
-      var p = window.portals[ent[0]];
+      // check if entity already exists
+      if (ent[0] in window.portals) {
+        // yes. now check to see if the entity data we have is newer than that in place
+        var p = window.portals[ent[0]];
 
-      if (p.options.timestamp >= ent[1]) return; // this data is identical or older - abort processing
+        if (p.options.timestamp >= ent[1]) return; // this data is identical or older - abort processing
 
-      // the data we have is newer. many data changes require re-rendering of the portal
-      // (e.g. level changed, so size is different, or stats changed so highlighter is different)
-      // so to keep things simple we'll always re-create the entity in this case
+        // the data we have is newer. many data changes require re-rendering of the portal
+        // (e.g. level changed, so size is different, or stats changed so highlighter is different)
+        // so to keep things simple we'll always re-create the entity in this case
 
-      // remember the old details, for the callback
+        // remember the old details, for the callback
 
-      previousData = p.options.data;
+        previousData = p.options.data;
 
-      this.deletePortalEntity(ent[0]);
-    }
-
-    var portalLevel = parseInt(ent[2][4]) || 0;
-    var team = teamStringToId(ent[2][1]);
-    // the data returns unclaimed portals as level 1 - but IITC wants them treated as level 0
-    if (team == TEAM_NONE) portalLevel = 0;
-
-    var latlng = L.latLng(ent[2][2] / 1e6, ent[2][3] / 1e6);
-
-    var data = decodeArray.portalSummary(ent[2]);
-
-    var dataOptions = {
-      level: portalLevel,
-      team: team,
-      ent: ent, // LEGACY - TO BE REMOVED AT SOME POINT! use .guid, .timestamp and .data instead
-      guid: ent[0],
-      timestamp: ent[1],
-      data: data,
-    };
-
-    window.pushPortalGuidPositionCache(ent[0], data.latE6, data.lngE6);
-
-    var marker = createMarker(latlng, dataOptions);
-
-    function handler_portal_click(e) {
-      if (event.shiftKey) window.plugin.exportcoords.addToList(e.target.options.guid);
-      window.renderPortalDetails(e.target.options.guid);
-    }
-    function handler_portal_dblclick(e) {
-      window.renderPortalDetails(e.target.options.guid);
-      window.map.setView(e.target.getLatLng(), DEFAULT_ZOOM);
-    }
-    function handler_portal_contextmenu(e) {
-      window.renderPortalDetails(e.target.options.guid);
-      if (window.isSmartphone()) {
-        window.show("info");
-      } else if (!$("#scrollwrapper").is(":visible")) {
-        $("#sidebartoggle").click();
+        this.deletePortalEntity(ent[0]);
       }
-    }
 
-    marker.on("click", handler_portal_click);
-    marker.on("dblclick", handler_portal_dblclick);
-    marker.on("contextmenu", handler_portal_contextmenu);
+      var portalLevel = parseInt(ent[2][4]) || 0;
+      var team = teamStringToId(ent[2][1]);
+      // the data returns unclaimed portals as level 1 - but IITC wants them treated as level 0
+      if (team == TEAM_NONE) portalLevel = 0;
 
-    window.runHooks("portalAdded", { portal: marker, previousData: previousData });
+      var latlng = L.latLng(ent[2][2] / 1e6, ent[2][3] / 1e6);
 
-    window.portals[ent[0]] = marker;
+      var data = decodeArray.portalSummary(ent[2]);
 
-    // check for URL links to portal, and select it if this is the one
-    if (urlPortalLL && urlPortalLL[0] == marker.getLatLng().lat && urlPortalLL[1] == marker.getLatLng().lng) {
-      // URL-passed portal found via pll parameter - set the guid-based parameter
-      log.log("urlPortalLL " + urlPortalLL[0] + "," + urlPortalLL[1] + " matches portal GUID " + ent[0]);
+      var dataOptions = {
+        level: portalLevel,
+        team: team,
+        ent: ent, // LEGACY - TO BE REMOVED AT SOME POINT! use .guid, .timestamp and .data instead
+        guid: ent[0],
+        timestamp: ent[1],
+        data: data,
+      };
 
-      urlPortal = ent[0];
-      urlPortalLL = undefined; // clear the URL parameter so it's not matched again
-    }
-    if (urlPortal == ent[0]) {
-      // URL-passed portal found via guid parameter - set it as the selected portal
-      log.log("urlPortal GUID " + urlPortal + " found - selecting...");
-      selectedPortal = ent[0];
-      urlPortal = undefined; // clear the URL parameter so it's not matched again
-    }
+      window.pushPortalGuidPositionCache(ent[0], data.latE6, data.lngE6);
 
-    // (re-)select the portal, to refresh the sidebar on any changes
-    if (ent[0] == selectedPortal) {
-      log.log("portal guid " + ent[0] + " is the selected portal - re-rendering portal details");
-      renderPortalDetails(selectedPortal);
-    }
+      var marker = createMarker(latlng, dataOptions);
 
-    window.ornaments.addPortal(marker);
+      function handler_portal_click(e) {
+        if (event.altKey) window.plugin.exportcoords.addToList(e.target.options.guid);
+        window.renderPortalDetails(e.target.options.guid);
+      }
+      function handler_portal_dblclick(e) {
+        window.renderPortalDetails(e.target.options.guid);
+        window.map.setView(e.target.getLatLng(), DEFAULT_ZOOM);
+      }
+      function handler_portal_contextmenu(e) {
+        window.renderPortalDetails(e.target.options.guid);
+        if (window.isSmartphone()) {
+          window.show("info");
+        } else if (!$("#scrollwrapper").is(":visible")) {
+          $("#sidebartoggle").click();
+        }
+      }
 
-    //TODO? postpone adding to the map layer
-    window.Render.prototype.addPortalToMapLayer(marker);
-  };
+      marker.on("click", handler_portal_click);
+      marker.on("dblclick", handler_portal_dblclick);
+      marker.on("contextmenu", handler_portal_contextmenu);
+
+      window.runHooks("portalAdded", { portal: marker, previousData: previousData });
+
+      window.portals[ent[0]] = marker;
+
+      // check for URL links to portal, and select it if this is the one
+      if (urlPortalLL && urlPortalLL[0] == marker.getLatLng().lat && urlPortalLL[1] == marker.getLatLng().lng) {
+        // URL-passed portal found via pll parameter - set the guid-based parameter
+        log.log("urlPortalLL " + urlPortalLL[0] + "," + urlPortalLL[1] + " matches portal GUID " + ent[0]);
+
+        urlPortal = ent[0];
+        urlPortalLL = undefined; // clear the URL parameter so it's not matched again
+      }
+      if (urlPortal == ent[0]) {
+        // URL-passed portal found via guid parameter - set it as the selected portal
+        log.log("urlPortal GUID " + urlPortal + " found - selecting...");
+        selectedPortal = ent[0];
+        urlPortal = undefined; // clear the URL parameter so it's not matched again
+      }
+
+      // (re-)select the portal, to refresh the sidebar on any changes
+      if (ent[0] == selectedPortal) {
+        log.log("portal guid " + ent[0] + " is the selected portal - re-rendering portal details");
+        renderPortalDetails(selectedPortal);
+      }
+
+      window.ornaments.addPortal(marker);
+
+      //TODO? postpone adding to the map layer
+      window.Render.prototype.addPortalToMapLayer(marker);
+    });
 
   /*********** Selected Coordinates ************************************************************/
   window.plugin.exportcoords.addLink = function (d) {
@@ -136,7 +137,7 @@ function wrapper(plugin_info) {
       return;
     }
 
-    const selectiveCoordsList = JSON.parse(localStorage["selectiveCoordsList"]);
+    var selectiveCoordsList = JSON.parse(localStorage["selectiveCoordsList"]);
     var { latE6, lngE6, image, title } = window.portals[guid].options.data;
 
     console.log(window.portals[guid].options.data);
@@ -185,7 +186,7 @@ function wrapper(plugin_info) {
 
   window.plugin.exportcoords.refreshSelectedCoordinatesList = function () {
     var selectiveCoordsList = JSON.parse(localStorage["selectiveCoordsList"]);
-    const firstEntries = selectiveCoordsList;
+    var firstEntries = selectiveCoordsList;
 
     var html = firstEntries.map(
       ({ image, title, guid }) => `
